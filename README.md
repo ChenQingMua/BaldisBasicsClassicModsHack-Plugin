@@ -1,6 +1,8 @@
 # Baldi's Basics Classic Mods Hack
 基于 __BepInEx 5.4.23__ ，针对 __Baldi's Basics Classic__ 以及社区衍生的 __模组版本__ 打造的通用作弊菜单。
 
+__我不保证全部功能都能正常在所有版本生效！__
+
 ---
 
 ## 功能列表
