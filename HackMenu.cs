@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using UnityEngine;
 
 namespace UniversalHack
@@ -9,14 +10,15 @@ namespace UniversalHack
     {
         public static List<string> ActiveFeatures = new List<string>();
         public static readonly object Lock = new object();
+        public static bool ShowMenu { get; private set; } = true;
 
         private readonly string[][] MENUS = new[]
         {
-            new[] { "事件类", "无视校长互动" , "无视袜子互动", "禁用巴迪移动", "无巴迪", "无校长", "无袜子", "无欢乐时间", "无扫把", "无第一名", "无校霸" },
+            new[] { "事件类", "无视校长互动" , "无视袜子互动", "禁用巴迪移动", "直接激活愤怒", "聋哑巴迪", "无巴迪", "无校长", "无袜子", "无欢乐时间", "无扫把", "无第一名", "无校霸" , "书黑客", "跳转全错场景", "直接胜利"},
             new[] { "移动类", "穿墙", "移速", "无视推动" },
             new[] { "玩家类", "无敌", "无限体力", "无限道具"},
-            new[] { "视觉类", "绘制", "增大视野"},
-            new[] { "主菜单", "功能列表", "水印" }
+            new[] { "视觉类", "绘制", "放大镜", "增大视野", "追踪器", "红温模式", "控件描边", "贴图旋转", "自转"},
+            new[] { "主菜单", "功能列表", "水印", "隐藏菜单仅移除遮挡" }
         };
 
         private Dictionary<string, bool> featureStates = new Dictionary<string, bool>();
@@ -27,6 +29,8 @@ namespace UniversalHack
 
         private float hue = 0f;
         private bool showMenu = true;
+        private bool hideOverlayOnly = false;
+        private float originalTimeScale = 1f;
         private GUIStyle titleStyle;
         private GUIStyle buttonStyle;
         private GUIStyle buttonActiveStyle;
@@ -36,11 +40,14 @@ namespace UniversalHack
         private Texture2D bgTex;
         private Texture2D titleBgTex;
         private Texture2D blackTex;
+        private Texture2D grayTex;
 
-        private const float MENU_WIDTH = 280f;
+        private const float MENU_WIDTH = 300f;
         private const float TITLE_HEIGHT = 72f;
         private const float BUTTON_HEIGHT = 64f;
         private const float ALPHA_BG = 0.33f;
+
+        private bool tabPressedInGUI = false;
 
         void Awake()
         {
@@ -48,6 +55,7 @@ namespace UniversalHack
             bgTex = MakeTex(new Color(1f, 1f, 1f, ALPHA_BG));
             titleBgTex = MakeTex(Color.white);
             blackTex = MakeTex(new Color(0f, 0f, 0f, 0.54f));
+            grayTex = MakeTex(new Color(0f, 0f, 0f, 0.6f));
 
             float startX = 40f;
             float startY = 40f;
@@ -72,27 +80,111 @@ namespace UniversalHack
 
         void Update()
         {
-            hue = (hue + 0.5f) % 360f;
 
-            if (Input.GetKeyDown(KeyCode.Insert))
-                showMenu = !showMenu;
-
-            if (Input.GetKeyDown(KeyCode.F1))
-                Cursor.visible = !Cursor.visible;
+            hue = (hue + 90f * Time.unscaledDeltaTime) % 360f;
         }
 
         void OnGUI()
         {
+
+            Event e = Event.current;
+            if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Tab)
+            {
+                tabPressedInGUI = true;
+                e.Use();
+            }
+
             InitStyles();
 
             if (showMenu)
             {
-                Cursor.visible = true;
+                if (!hideOverlayOnly)
+                {
+                    GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), grayTex);
+                }
                 DrawMenus();
             }
 
             DrawWatermark();
             DrawFeatureList();
+
+            if (tabPressedInGUI)
+            {
+                tabPressedInGUI = false;
+                ToggleMenu();
+            }
+        }
+
+        void ToggleMenu()
+        {
+            bool hideOverlayOnlyEnabled = featureStates.ContainsKey("隐藏菜单仅移除遮挡")
+                && featureStates["隐藏菜单仅移除遮挡"];
+
+            if (showMenu)
+            {
+
+                if (hideOverlayOnlyEnabled)
+                {
+
+                    hideOverlayOnly = true;
+                    Time.timeScale = originalTimeScale;
+                    FreezeGame(false);
+                }
+                else
+                {
+
+                    showMenu = false;
+                    ShowMenu = false;
+                    Time.timeScale = originalTimeScale;
+                    FreezeGame(false);
+                }
+            }
+            else
+            {
+
+                showMenu = true;
+                ShowMenu = true;
+                hideOverlayOnly = false;
+                originalTimeScale = Time.timeScale;
+                Time.timeScale = 0f;
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+                FreezeGame(true);
+            }
+        }
+
+        void FreezeGame(bool freeze)
+        {
+            object player = null;
+            System.Type playerType = null;
+            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    foreach (var type in asm.GetTypes())
+                    {
+                        if (type.Name != "PlayerScript") continue;
+                        player = FindObjectOfType(type);
+                        if (player != null)
+                        {
+                            playerType = type;
+                            break;
+                        }
+                    }
+                }
+                catch { }
+                if (player != null) break;
+            }
+
+            if (player != null && playerType != null)
+            {
+                var ccField = playerType.GetField("cc", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (ccField != null)
+                {
+                    var cc = ccField.GetValue(player) as CharacterController;
+                    if (cc != null) cc.enabled = !freeze;
+                }
+            }
         }
 
         void InitStyles()
@@ -241,9 +333,8 @@ namespace UniversalHack
             float y = Screen.height - 20f;
 
             string timeStr = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
-            //string procStr = Application.productName + ":" + System.Diagnostics.Process.GetCurrentProcess().Id;
-            string procStr = "Press F1 To Force Show The Mouse";
-            string logoStr = "Baldis Basics Classic Mods Hack By JisGreen";
+            string procStr = "Baldis Basics Classic Mods Hack By JisGreen";
+            string logoStr = "Press Tab To Open Or Close Menu";
 
             Color c1 = GetRainbowColor(hue);
             Color c2 = GetRainbowColor((hue + 40f) % 360f);
@@ -260,18 +351,18 @@ namespace UniversalHack
 
             GUIStyle s2 = new GUIStyle(ws);
             s2.normal.textColor = c2;
-            Vector2 sz2 = s2.CalcSize(new GUIContent(" " + procStr + " "));
+            Vector2 sz2 = s2.CalcSize(new GUIContent(" " + logoStr + " "));
 
             GUIStyle s3 = new GUIStyle(ws);
             s3.normal.textColor = c3;
-            Vector2 sz3 = s3.CalcSize(new GUIContent(" " + logoStr + " "));
+            Vector2 sz3 = s3.CalcSize(new GUIContent(" " + procStr + " "));
 
             float totalHeight = sz1.y + sz2.y + sz3.y;
             float startY = y - totalHeight;
 
             GUI.Label(new Rect(x, startY, sz1.x, sz1.y), " " + timeStr + " ", s1);
-            GUI.Label(new Rect(x, startY + sz1.y, sz2.x, sz2.y), " " + procStr + " ", s2);
-            GUI.Label(new Rect(x, startY + sz1.y + sz2.y, sz3.x, sz3.y), " " + logoStr + " ", s3);
+            GUI.Label(new Rect(x, startY + sz1.y, sz2.x, sz2.y), " " + logoStr + " ", s2);
+            GUI.Label(new Rect(x, startY + sz1.y + sz2.y, sz3.x, sz3.y), " " + procStr + " ", s3);
         }
 
         void DrawFeatureList()
@@ -359,6 +450,7 @@ namespace UniversalHack
             if (bgTex != null) Destroy(bgTex);
             if (titleBgTex != null) Destroy(titleBgTex);
             if (blackTex != null) Destroy(blackTex);
+            if (grayTex != null) Destroy(grayTex);
         }
     }
 }

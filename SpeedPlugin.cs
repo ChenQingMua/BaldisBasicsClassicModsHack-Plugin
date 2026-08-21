@@ -1,80 +1,53 @@
-﻿using HarmonyLib;
-using System.Reflection;
+﻿using System.Reflection;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace UniversalHack
 {
     public class SpeedPlugin : MonoBehaviour
     {
-        private static bool patched = false;
         private static float originalWalkSpeed;
         private static float originalRunSpeed;
         private static bool speedApplied = false;
 
+        private object playerInstance;
+        private System.Type playerType;
+        private bool playerFound = false;
+
         void Awake()
         {
-            if (!patched)
-            {
-                var harmony = new Harmony("com.universal.speed");
-                harmony.PatchAll();
-                patched = true;
-            }
+
+            SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
-        [HarmonyPatch]
-        public class PlayerScript_Start_Patch
+        void OnDestroy()
         {
-            static MethodBase TargetMethod()
-            {
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    foreach (var type in asm.GetTypes())
-                    {
-                        if (type.Name != "PlayerScript") continue;
-                        var method = type.GetMethod("Start",
-                            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                        if (method != null) return method;
-                    }
-                }
-                return null;
-            }
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+        }
 
-            static void Postfix(object __instance)
-            {
-                var type = __instance.GetType();
-                var walkSpeedField = type.GetField("walkSpeed",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                var runSpeedField = type.GetField("runSpeed",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
 
-                if (walkSpeedField != null)
-                    originalWalkSpeed = (float)walkSpeedField.GetValue(__instance);
-                if (runSpeedField != null)
-                    originalRunSpeed = (float)runSpeedField.GetValue(__instance);
+            playerInstance = null;
+            playerType = null;
+            playerFound = false;
+            speedApplied = false;
+
+            if (HackMenu.ActiveFeatures.Contains("移速"))
+            {
+
             }
         }
 
         void Update()
         {
-            object player = null;
-            System.Type playerType = null;
 
-            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+            if (!playerFound || playerInstance == null)
             {
-                foreach (var type in asm.GetTypes())
-                {
-                    if (type.Name != "PlayerScript") continue;
-                    player = FindObjectOfType(type);
-                    if (player != null)
-                    {
-                        playerType = type;
-                        break;
-                    }
-                }
-                if (player != null) break;
+                FindPlayer();
             }
 
-            if (player == null || playerType == null) return;
+            if (playerInstance == null || playerType == null) return;
 
             var walkSpeedField = playerType.GetField("walkSpeed",
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -87,8 +60,14 @@ namespace UniversalHack
             {
                 if (!speedApplied)
                 {
-                    walkSpeedField.SetValue(player, originalWalkSpeed * 2f);
-                    runSpeedField.SetValue(player, originalRunSpeed * 2f);
+
+                    if (originalWalkSpeed == 0f)
+                        originalWalkSpeed = (float)walkSpeedField.GetValue(playerInstance);
+                    if (originalRunSpeed == 0f)
+                        originalRunSpeed = (float)runSpeedField.GetValue(playerInstance);
+
+                    walkSpeedField.SetValue(playerInstance, originalWalkSpeed * 2f);
+                    runSpeedField.SetValue(playerInstance, originalRunSpeed * 2f);
                     speedApplied = true;
                 }
             }
@@ -96,10 +75,43 @@ namespace UniversalHack
             {
                 if (speedApplied)
                 {
-                    walkSpeedField.SetValue(player, originalWalkSpeed);
-                    runSpeedField.SetValue(player, originalRunSpeed);
+                    walkSpeedField.SetValue(playerInstance, originalWalkSpeed);
+                    runSpeedField.SetValue(playerInstance, originalRunSpeed);
                     speedApplied = false;
                 }
+            }
+        }
+
+        private void FindPlayer()
+        {
+            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    foreach (var type in asm.GetTypes())
+                    {
+                        if (type.Name != "PlayerScript") continue;
+                        var obj = FindObjectOfType(type);
+                        if (obj != null)
+                        {
+                            playerInstance = obj;
+                            playerType = type;
+                            playerFound = true;
+
+                            var walkField = type.GetField("walkSpeed",
+                                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                            var runField = type.GetField("runSpeed",
+                                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                            if (walkField != null)
+                                originalWalkSpeed = (float)walkField.GetValue(obj);
+                            if (runField != null)
+                                originalRunSpeed = (float)runField.GetValue(obj);
+
+                            return;
+                        }
+                    }
+                }
+                catch { }
             }
         }
     }

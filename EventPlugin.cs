@@ -1,211 +1,224 @@
 ﻿using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
-using HarmonyLib;
+using UnityEngine.SceneManagement;
 
 namespace UniversalHack
 {
     public class EventPlugin : MonoBehaviour
     {
-        private static bool patched = false;
         private Dictionary<string, bool> lastStates = new Dictionary<string, bool>();
         private object gcInstance;
         private System.Type gcType;
+        private bool gcFound = false;
+        private bool initialized = false;
+        private bool angerTriggered = false;
+
+        private object baldiInstance;
+        private System.Type baldiType;
+        private bool baldiFound = false;
 
         void Awake()
         {
-            if (!patched)
-            {
-                var harmony = new Harmony("com.universal.event");
-                harmony.PatchAll();
-                patched = true;
-            }
+            SceneManager.sceneLoaded += OnSceneLoaded;
+
+            PatchManager.Register("baldi_move", "BaldiScript", "Move",
+                prefix: typeof(Patches).GetMethod("BaldiMove_Prefix", BindingFlags.Static | BindingFlags.Public));
+
+            PatchManager.Register("principal_trigger", "PrincipalScript", "OnTriggerStay",
+                prefix: typeof(Patches).GetMethod("PrincipalTrigger_Prefix", BindingFlags.Static | BindingFlags.Public));
+
+            PatchManager.Register("crafters_trigger", "CraftersScript", "OnTriggerEnter",
+                prefix: typeof(Patches).GetMethod("CraftersTrigger_Prefix", BindingFlags.Static | BindingFlags.Public));
+        }
+
+        void OnDestroy()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+        }
+
+        void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            gcInstance = null;
+            gcType = null;
+            gcFound = false;
+            baldiInstance = null;
+            baldiType = null;
+            baldiFound = false;
+            initialized = false;
+            angerTriggered = false;
+            lastStates.Clear();
         }
 
         void Update()
         {
-            if (gcInstance == null)
+            if (!gcFound || gcInstance == null)
             {
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    foreach (var type in asm.GetTypes())
-                    {
-                        if (!type.Name.Contains("GameController")) continue;
-                        gcInstance = FindObjectOfType(type);
-                        if (gcInstance != null)
-                        {
-                            gcType = type;
-                            break;
-                        }
-                    }
-                    if (gcInstance != null) break;
-                }
+                FindGameController();
             }
 
             if (gcInstance == null) return;
 
-            bool currentBaldi = HackMenu.ActiveFeatures.Contains("无巴迪");
-            if (!lastStates.ContainsKey("无巴迪")) lastStates["无巴迪"] = false;
-            if (currentBaldi != lastStates["无巴迪"])
+            if (!initialized)
             {
-                lastStates["无巴迪"] = currentBaldi;
-                var baldiField = gcType.GetField("baldi", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (baldiField != null)
-                {
-                    var baldi = baldiField.GetValue(gcInstance) as GameObject;
-                    if (baldi != null) baldi.SetActive(!currentBaldi);
-                }
+                InitializeStates();
+                return;
             }
 
-            bool currentPrincipal = HackMenu.ActiveFeatures.Contains("无校长");
-            if (!lastStates.ContainsKey("无校长")) lastStates["无校长"] = false;
-            if (currentPrincipal != lastStates["无校长"])
+            if (HackMenu.ActiveFeatures.Contains("直接激活愤怒") && !angerTriggered)
             {
-                lastStates["无校长"] = currentPrincipal;
-                var principalField = gcType.GetField("principal", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (principalField != null)
-                {
-                    var principal = principalField.GetValue(gcInstance) as GameObject;
-                    if (principal != null) principal.SetActive(!currentPrincipal);
-                }
+                TriggerAnger();
             }
 
-            bool currentCrafters = HackMenu.ActiveFeatures.Contains("无袜子");
-            if (!lastStates.ContainsKey("无袜子")) lastStates["无袜子"] = false;
-            if (currentCrafters != lastStates["无袜子"])
+            if (HackMenu.ActiveFeatures.Contains("聋哑巴迪"))
             {
-                lastStates["无袜子"] = currentCrafters;
-                var craftersField = gcType.GetField("crafters", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (craftersField != null)
-                {
-                    var crafters = craftersField.GetValue(gcInstance) as GameObject;
-                    if (crafters != null) crafters.SetActive(!currentCrafters);
-                }
+                ApplyDeafBaldi();
             }
 
-            bool currentPlaytime = HackMenu.ActiveFeatures.Contains("无欢乐时间");
-            if (!lastStates.ContainsKey("无欢乐时间")) lastStates["无欢乐时间"] = false;
-            if (currentPlaytime != lastStates["无欢乐时间"])
-            {
-                lastStates["无欢乐时间"] = currentPlaytime;
-                var playtimeField = gcType.GetField("playtime", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (playtimeField != null)
-                {
-                    var playtime = playtimeField.GetValue(gcInstance) as GameObject;
-                    if (playtime != null) playtime.SetActive(!currentPlaytime);
-                }
-            }
+            ToggleObject("无巴迪", "baldi");
+            ToggleObject("无校长", "principal");
+            ToggleObject("无袜子", "crafters");
+            ToggleObject("无欢乐时间", "playtime");
+            ToggleObject("无扫把", "gottaSweep");
+            ToggleObject("无第一名", "firstPrize");
+            ToggleObject("无校霸", "bully");
+        }
 
-            bool currentSweep = HackMenu.ActiveFeatures.Contains("无扫把");
-            if (!lastStates.ContainsKey("无扫把")) lastStates["无扫把"] = false;
-            if (currentSweep != lastStates["无扫把"])
+        private void FindGameController()
+        {
+            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
             {
-                lastStates["无扫把"] = currentSweep;
-                var gottaSweepField = gcType.GetField("gottaSweep", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (gottaSweepField != null)
+                try
                 {
-                    var gottaSweep = gottaSweepField.GetValue(gcInstance) as GameObject;
-                    if (gottaSweep != null) gottaSweep.SetActive(!currentSweep);
-                }
-            }
+                    foreach (var type in asm.GetTypes())
+                    {
+                        if (!type.Name.Contains("GameController")) continue;
+                        var obj = FindObjectOfType(type);
+                        if (obj != null)
+                        {
+                            gcInstance = obj;
+                            gcType = type;
+                            gcFound = true;
 
-            bool currentFirstPrize = HackMenu.ActiveFeatures.Contains("无第一名");
-            if (!lastStates.ContainsKey("无第一名")) lastStates["无第一名"] = false;
-            if (currentFirstPrize != lastStates["无第一名"])
-            {
-                lastStates["无第一名"] = currentFirstPrize;
-                var firstPrizeField = gcType.GetField("firstPrize", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (firstPrizeField != null)
-                {
-                    var firstPrize = firstPrizeField.GetValue(gcInstance) as GameObject;
-                    if (firstPrize != null) firstPrize.SetActive(!currentFirstPrize);
+                            FindBaldi();
+                            return;
+                        }
+                    }
                 }
-            }
-
-            bool currentBully = HackMenu.ActiveFeatures.Contains("无校霸");
-            if (!lastStates.ContainsKey("无校霸")) lastStates["无校霸"] = false;
-            if (currentBully != lastStates["无校霸"])
-            {
-                lastStates["无校霸"] = currentBully;
-                var bullyField = gcType.GetField("bully", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (bullyField != null)
-                {
-                    var bully = bullyField.GetValue(gcInstance) as GameObject;
-                    if (bully != null) bully.SetActive(!currentBully);
-                }
+                catch { }
             }
         }
 
-        [HarmonyPatch]
-        public class BaldiScript_Move_Patch
+        private void FindBaldi()
         {
-            static MethodBase TargetMethod()
+            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
             {
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+                try
                 {
                     foreach (var type in asm.GetTypes())
                     {
                         if (type.Name != "BaldiScript") continue;
-                        var method = type.GetMethod("Move",
-                            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                        if (method != null) return method;
+                        var obj = FindObjectOfType(type);
+                        if (obj != null)
+                        {
+                            baldiInstance = obj;
+                            baldiType = type;
+                            baldiFound = true;
+                            return;
+                        }
                     }
                 }
-                return null;
-            }
-
-            static bool Prefix()
-            {
-                return !HackMenu.ActiveFeatures.Contains("禁用巴迪移动");
+                catch { }
             }
         }
 
-        [HarmonyPatch]
-        public class PrincipalScript_OnTriggerStay_Patch
+        private void ApplyDeafBaldi()
         {
-            static MethodBase TargetMethod()
-            {
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    foreach (var type in asm.GetTypes())
-                    {
-                        if (type.Name != "PrincipalScript") continue;
-                        var method = type.GetMethod("OnTriggerStay",
-                            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                        if (method != null) return method;
-                    }
-                }
-                return null;
-            }
+            if (baldiInstance == null || baldiType == null) return;
 
-            static bool Prefix()
+            var antiHearingField = baldiType.GetField("antiHearing",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var antiHearingTimeField = baldiType.GetField("antiHearingTime",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            if (antiHearingField != null)
+                antiHearingField.SetValue(baldiInstance, true);
+
+            if (antiHearingTimeField != null)
+                antiHearingTimeField.SetValue(baldiInstance, 9999f);
+        }
+
+        private void TriggerAnger()
+        {
+            var getAngryMethod = gcType.GetMethod("GetAngry",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            if (getAngryMethod != null)
             {
-                return !HackMenu.ActiveFeatures.Contains("无视校长互动");
+                getAngryMethod.Invoke(gcInstance, new object[] { 1f });
+                angerTriggered = true;
+
             }
         }
 
-        [HarmonyPatch]
-        public class CraftersScript_OnTriggerEnter_Patch
+        private void InitializeStates()
         {
-            static MethodBase TargetMethod()
+            string[] features = { "无巴迪", "无校长", "无袜子", "无欢乐时间", "无扫把", "无第一名", "无校霸" };
+            string[] fields = { "baldi", "principal", "crafters", "playtime", "gottaSweep", "firstPrize", "bully" };
+
+            for (int i = 0; i < features.Length; i++)
             {
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+                var field = gcType.GetField(fields[i],
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+                bool currentEnabled = false;
+
+                if (field != null)
                 {
-                    foreach (var type in asm.GetTypes())
+                    var obj = field.GetValue(gcInstance) as GameObject;
+                    if (obj != null)
                     {
-                        if (type.Name != "CraftersScript") continue;
-                        var method = type.GetMethod("OnTriggerEnter",
-                            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                        if (method != null) return method;
+                        bool objActive = obj.activeSelf;
+                        bool featureOn = HackMenu.ActiveFeatures.Contains(features[i]);
+
+                        if (featureOn && objActive)
+                        {
+                            obj.SetActive(false);
+                        }
+
+                        currentEnabled = featureOn;
                     }
                 }
-                return null;
+
+                lastStates[features[i]] = currentEnabled;
             }
 
-            static bool Prefix()
+            initialized = true;
+        }
+
+        private void ToggleObject(string featureName, string fieldName)
+        {
+            bool current = HackMenu.ActiveFeatures.Contains(featureName);
+            if (!lastStates.ContainsKey(featureName)) lastStates[featureName] = false;
+
+            if (current != lastStates[featureName])
             {
-                return !HackMenu.ActiveFeatures.Contains("无视袜子互动");
+                lastStates[featureName] = current;
+                var field = gcType.GetField(fieldName,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null)
+                {
+                    var obj = field.GetValue(gcInstance) as GameObject;
+                    if (obj != null) obj.SetActive(!current);
+                }
             }
+        }
+
+        public static class Patches
+        {
+            public static bool BaldiMove_Prefix() => !HackMenu.ActiveFeatures.Contains("禁用巴迪移动");
+            public static bool PrincipalTrigger_Prefix() => !HackMenu.ActiveFeatures.Contains("无视校长互动");
+            public static bool CraftersTrigger_Prefix() => !HackMenu.ActiveFeatures.Contains("无视袜子互动");
         }
     }
 }

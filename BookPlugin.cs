@@ -4,13 +4,13 @@ using UnityEngine.SceneManagement;
 
 namespace UniversalHack
 {
-    public class FOVPlugin : MonoBehaviour
+    public class BookPlugin : MonoBehaviour
     {
-        private float defaultFOV = 60f;
         private object gcInstance;
         private System.Type gcType;
         private bool gcFound = false;
-        private bool fovRecorded = false;
+        private bool qPressed = false;
+        private bool ePressed = false;
 
         void Awake()
         {
@@ -27,12 +27,13 @@ namespace UniversalHack
             gcInstance = null;
             gcType = null;
             gcFound = false;
-            fovRecorded = false;
-            defaultFOV = 60f;
         }
 
         void Update()
         {
+            if (!HackMenu.ActiveFeatures.Contains("书黑客"))
+                return;
+
             if (!gcFound || gcInstance == null)
             {
                 FindGameController();
@@ -40,44 +41,45 @@ namespace UniversalHack
 
             if (gcInstance == null) return;
 
-            var camField = gcType.GetField("playerCamera",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (camField == null) return;
-
-            var cam = camField.GetValue(gcInstance) as Camera;
-            if (cam == null) return;
-
-            if (!fovRecorded)
+            if (Input.GetKeyDown(KeyCode.Q) && !qPressed)
             {
-                defaultFOV = cam.fieldOfView;
-                fovRecorded = true;
-
-                ApplyFOV(cam);
-                return;
+                qPressed = true;
+                ModifyNotebooks(1);
+            }
+            if (Input.GetKeyUp(KeyCode.Q))
+            {
+                qPressed = false;
             }
 
-            ApplyFOV(cam);
+            if (Input.GetKeyDown(KeyCode.E) && !ePressed)
+            {
+                ePressed = true;
+                ModifyNotebooks(-1);
+            }
+            if (Input.GetKeyUp(KeyCode.E))
+            {
+                ePressed = false;
+            }
         }
 
-        void ApplyFOV(Camera cam)
+        void ModifyNotebooks(int delta)
         {
-            bool zoomIn = HackMenu.ActiveFeatures.Contains("放大镜");
-            bool zoomOut = HackMenu.ActiveFeatures.Contains("增大视野");
+            var notebooksField = gcType.GetField("notebooks",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            var updateMethod = gcType.GetMethod("UpdateNotebookCount",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
-            if ((zoomIn && zoomOut) || (!zoomIn && !zoomOut))
-            {
-                cam.fieldOfView = defaultFOV;
-            }
-            else if (zoomIn)
-            {
+            if (notebooksField == null) return;
 
-                cam.fieldOfView = defaultFOV - 30f;
-            }
-            else if (zoomOut)
-            {
+            int current = (int)notebooksField.GetValue(gcInstance);
+            int newValue = Mathf.Max(0, current + delta);
+            notebooksField.SetValue(gcInstance, newValue);
 
-                cam.fieldOfView = defaultFOV + 50f;
+            if (updateMethod != null)
+            {
+                updateMethod.Invoke(gcInstance, null);
             }
+
         }
 
         private void FindGameController()

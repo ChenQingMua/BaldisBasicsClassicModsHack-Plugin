@@ -1,55 +1,56 @@
 ﻿using System.Reflection;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace UniversalHack
 {
     public class NoclipPlugin : MonoBehaviour
     {
-        private static bool patched = false;
-        private static object playerInstance;
-        private static System.Type playerType;
-        private static Vector3 lastPosition;
+        private object playerInstance;
+        private System.Type playerType;
+        private bool playerFound = false;
+        private FieldInfo ccField;
+        private FieldInfo heightField;
+        private Transform playerTransform;
 
         void Awake()
         {
-            if (!patched)
+            SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+
+        void OnDestroy()
+        {
+
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+
+            if (playerInstance != null && ccField != null)
             {
-                patched = true;
+                var cc = ccField.GetValue(playerInstance) as CharacterController;
+                if (cc != null) cc.enabled = true;
             }
+        }
+
+        void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            playerInstance = null;
+            playerType = null;
+            playerFound = false;
+            ccField = null;
+            heightField = null;
+            playerTransform = null;
         }
 
         void Update()
         {
-            if (playerInstance == null)
+            if (!playerFound || playerInstance == null)
             {
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    foreach (var type in asm.GetTypes())
-                    {
-                        if (type.Name != "PlayerScript") continue;
-                        playerInstance = FindObjectOfType(type);
-                        if (playerInstance != null)
-                        {
-                            playerType = type;
-                            break;
-                        }
-                    }
-                    if (playerInstance != null) break;
-                }
+                FindPlayer();
             }
 
-            if (playerInstance == null) return;
-
-            var ccField = playerType.GetField("cc",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (ccField == null) return;
+            if (playerInstance == null || ccField == null) return;
 
             var cc = ccField.GetValue(playerInstance) as CharacterController;
             if (cc == null) return;
-
-            var heightField = playerType.GetField("height",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            var transform = (playerInstance as MonoBehaviour).transform;
 
             if (HackMenu.ActiveFeatures.Contains("穿墙"))
             {
@@ -60,12 +61,12 @@ namespace UniversalHack
                 float speed = 20f * Time.deltaTime;
                 Vector3 move = Vector3.zero;
 
-                if (Input.GetKey(KeyCode.W)) move += transform.forward;
-                if (Input.GetKey(KeyCode.S)) move -= transform.forward;
-                if (Input.GetKey(KeyCode.A)) move -= transform.right;
-                if (Input.GetKey(KeyCode.D)) move += transform.right;
+                if (Input.GetKey(KeyCode.W)) move += playerTransform.forward;
+                if (Input.GetKey(KeyCode.S)) move -= playerTransform.forward;
+                if (Input.GetKey(KeyCode.A)) move -= playerTransform.right;
+                if (Input.GetKey(KeyCode.D)) move += playerTransform.right;
 
-                transform.position += move.normalized * speed;
+                playerTransform.position += move.normalized * speed;
             }
             else
             {
@@ -73,17 +74,31 @@ namespace UniversalHack
             }
         }
 
-        void OnDestroy()
+        private void FindPlayer()
         {
-            if (playerInstance != null)
+            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
             {
-                var ccField = playerType.GetField("cc",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (ccField != null)
+                try
                 {
-                    var cc = ccField.GetValue(playerInstance) as CharacterController;
-                    if (cc != null) cc.enabled = true;
+                    foreach (var type in asm.GetTypes())
+                    {
+                        if (type.Name != "PlayerScript") continue;
+                        var obj = FindObjectOfType(type);
+                        if (obj != null)
+                        {
+                            playerInstance = obj;
+                            playerType = type;
+                            playerTransform = (obj as MonoBehaviour).transform;
+                            ccField = type.GetField("cc",
+                                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                            heightField = type.GetField("height",
+                                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                            playerFound = true;
+                            return;
+                        }
+                    }
                 }
+                catch { }
             }
         }
     }

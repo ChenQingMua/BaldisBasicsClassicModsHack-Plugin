@@ -1,25 +1,33 @@
-﻿using System;
-using System.Runtime.InteropServices;
+﻿using System.Reflection;
 using UnityEngine;
 
 namespace UniversalHack
 {
     public class MouseFixPlugin : MonoBehaviour
     {
-        [DllImport("user32.dll")]
-        static extern bool ClipCursor(IntPtr lpRect);
-
-        private bool forceShowCursor = false;
-
-        void Update()
+        void Awake()
         {
+            PatchManager.Register("mousefix_cursor", "InGameCursorController", "Update",
+                prefix: typeof(Patches).GetMethod("CursorUpdate_Prefix", BindingFlags.Static | BindingFlags.Public));
 
-            if (Input.GetKeyDown(KeyCode.F1))
+            PatchManager.Register("mousefix_appearing", "MouseAppearingScript", "Update",
+                prefix: typeof(Patches).GetMethod("MouseAppearing_Prefix", BindingFlags.Static | BindingFlags.Public));
+        }
+
+        public static class Patches
+        {
+            public static bool CursorUpdate_Prefix()
             {
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-                ClipCursor(IntPtr.Zero);
+                if (HackMenu.ShowMenu)
+                {
+                    Cursor.visible = true;
+                    Cursor.lockState = CursorLockMode.None;
+                    return false;
+                }
+                return true;
             }
+
+            public static bool MouseAppearing_Prefix() => !HackMenu.ShowMenu;
         }
     }
 }

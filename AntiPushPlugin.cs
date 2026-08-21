@@ -6,37 +6,19 @@ namespace UniversalHack
 {
     public class AntiPushPlugin : MonoBehaviour
     {
-        private static bool patched = false;
-
         void Awake()
         {
-            if (!patched)
-            {
-                var harmony = new Harmony("com.universal.antipush");
-                harmony.PatchAll();
-                patched = true;
-            }
+            PatchManager.Register(
+                "antipush",
+                "PlayerScript",
+                "OnTriggerStay",
+                prefix: typeof(Patches).GetMethod("OnTriggerStay_Prefix", BindingFlags.Static | BindingFlags.Public)
+            );
         }
 
-        [HarmonyPatch]
-        public class PlayerScript_OnTriggerStay_Patch
+        public static class Patches
         {
-            static MethodBase TargetMethod()
-            {
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    foreach (var type in asm.GetTypes())
-                    {
-                        if (type.Name != "PlayerScript") continue;
-                        var method = type.GetMethod("OnTriggerStay",
-                            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                        if (method != null) return method;
-                    }
-                }
-                return null;
-            }
-
-            static bool Prefix()
+            public static bool OnTriggerStay_Prefix()
             {
                 return !HackMenu.ActiveFeatures.Contains("无视推动");
             }

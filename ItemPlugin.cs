@@ -1,44 +1,83 @@
 ﻿using HarmonyLib;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace UniversalHack
 {
     public class ItemPlugin : MonoBehaviour
     {
         private static bool patched = false;
+        private Harmony harmony;
 
         void Awake()
         {
-            if (!patched)
+            harmony = new Harmony("com.universal.item");
+            SceneManager.sceneLoaded += OnSceneLoaded;
+
+            TryPatch();
+        }
+
+        void OnDestroy()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+        }
+
+        void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+
+            TryPatch();
+        }
+
+        void TryPatch()
+        {
+            if (patched) return;
+
+            var method = FindResetItemMethod();
+            if (method == null) return;
+
+            var prefix = typeof(Patches).GetMethod("ResetItem_Prefix",
+                BindingFlags.Static | BindingFlags.Public);
+
+            if (prefix != null)
             {
-                var harmony = new Harmony("com.universal.item");
-                harmony.PatchAll();
+                harmony.Patch(method, new HarmonyMethod(prefix));
                 patched = true;
+
             }
         }
 
-        [HarmonyPatch]
-        public class GameControllerScript_ResetItem_Patch
+        static MethodBase FindResetItemMethod()
         {
-            static MethodBase TargetMethod()
+            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
             {
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+                try
                 {
                     foreach (var type in asm.GetTypes())
                     {
-                        if (!type.Name.Contains("GameController")) continue;
+                        if (type.Name != "GameControllerScript") continue;
+
                         var method = type.GetMethod("ResetItem",
                             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
                         if (method != null) return method;
                     }
                 }
-                return null;
+                catch { }
             }
+            return null;
+        }
 
-            static bool Prefix()
+        public static class Patches
+        {
+            public static bool ResetItem_Prefix()
             {
-                return !HackMenu.ActiveFeatures.Contains("无限道具");
+                bool block = HackMenu.ActiveFeatures.Contains("无限道具");
+                if (block)
+                {
+
+                }
+                return !block;
             }
         }
     }

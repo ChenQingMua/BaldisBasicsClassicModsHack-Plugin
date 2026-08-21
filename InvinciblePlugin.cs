@@ -1,69 +1,23 @@
-﻿using HarmonyLib;
-using System.Reflection;
+﻿using System.Reflection;
 using UnityEngine;
 
 namespace UniversalHack
 {
     public class InvinciblePlugin : MonoBehaviour
     {
-        private static bool patched = false;
-
         void Awake()
         {
-            if (!patched)
-            {
-                var harmony = new Harmony("com.universal.invincible");
-                harmony.PatchAll();
-                patched = true;
-            }
+            PatchManager.Register("invincible_enter", "PlayerScript", "OnTriggerEnter",
+                prefix: typeof(Patches).GetMethod("OnTriggerEnter_Prefix", BindingFlags.Static | BindingFlags.Public));
+
+            PatchManager.Register("invincible_stay", "PlayerScript", "OnTriggerStay",
+                prefix: typeof(Patches).GetMethod("OnTriggerStay_Prefix", BindingFlags.Static | BindingFlags.Public));
         }
 
-        [HarmonyPatch]
-        public class PlayerScript_OnTriggerEnter_Patch
+        public static class Patches
         {
-            static MethodBase TargetMethod()
-            {
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    foreach (var type in asm.GetTypes())
-                    {
-                        if (type.Name != "PlayerScript") continue;
-                        var method = type.GetMethod("OnTriggerEnter",
-                            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                        if (method != null) return method;
-                    }
-                }
-                return null;
-            }
-
-            static bool Prefix()
-            {
-                return !HackMenu.ActiveFeatures.Contains("无敌");
-            }
-        }
-
-        [HarmonyPatch]
-        public class PlayerScript_OnTriggerStay_Patch
-        {
-            static MethodBase TargetMethod()
-            {
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    foreach (var type in asm.GetTypes())
-                    {
-                        if (type.Name != "PlayerScript") continue;
-                        var method = type.GetMethod("OnTriggerStay",
-                            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                        if (method != null) return method;
-                    }
-                }
-                return null;
-            }
-
-            static bool Prefix()
-            {
-                return !HackMenu.ActiveFeatures.Contains("无敌");
-            }
+            public static bool OnTriggerEnter_Prefix() => !HackMenu.ActiveFeatures.Contains("无敌");
+            public static bool OnTriggerStay_Prefix() => !HackMenu.ActiveFeatures.Contains("无敌");
         }
     }
 }
