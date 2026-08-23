@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace UniversalHack
 {
-    [BepInPlugin("com.universal.plugin", "Baldis Basics Classic Mods Hack", "1.1.0")]
+    [BepInPlugin("com.universal.plugin", "Baldis Basics Classic Mods Hack", "1.2.0")]
     public class EntryPoint : BaseUnityPlugin
     {
         void Awake()
