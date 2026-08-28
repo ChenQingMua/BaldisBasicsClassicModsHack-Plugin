@@ -1,12 +1,12 @@
-# Baldi's Basics Classic Mods Hack 1.2
+# Baldi's Basics Classic Mods Hack 1.3
 
-基于 __BepInEx 5.4.23__ ，针对 __Baldi's Basics Classic__ 以及社区衍生的 __模组版本__ 打造的通用作弊菜单。
+基于 __BepInEx 5.4.23__ ，针对 __Baldi's Basics Classic__ ，__Baldi's Basics Classic Remastered__ 以及社区衍生的 __模组版本__ 打造的通用作弊菜单。
 
 __我不保证全部功能都能正常在所有版本正常运行！__
 
 __1.2版本__ 添加 __英文模式__ 支持，可以在菜单遮挡层右下角复选框切换。
 
-A universal cheat menu built on __BepInEx 5.4.23__ for __Baldi's Basics Classic__ and community-derived __mod versions__.
+A universal cheat menu built on __BepInEx 5.4.23__ for __Baldi's Basics Classic__ , __Baldi's Basics Classic Remastered__ and community-derived __mod versions__.
 
 __I can't guarantee that all features will work properly on every version!__
 
@@ -14,6 +14,11 @@ __Version 1.2__ adds support for __English Mode__, which can be toggled via the 
 
 ![演示图片A](1.png)
 ![演示图片B](2.png)
+
+| 版本 | BBC | BBCR | BB+ | 注入方式 |
+|------|------|------|------|------|
+| 1.x | 完全 | 部分 | 部分 |BepInEx|
+
 
 ---
 
