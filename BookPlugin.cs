@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -7,10 +8,54 @@ namespace UniversalHack
     public class BookPlugin : MonoBehaviour
     {
         private object gcInstance;
-        private System.Type gcType;
-        private bool gcFound = false;
-        private bool qPressed = false;
-        private bool ePressed = false;
+        private Type gcType;
+        private bool gcFound;
+
+        private static Type inputType;
+        private static MethodInfo getKeyDownMethod;
+
+        static BookPlugin()
+        {
+            try
+            {
+                string[] assemblyNames = { "UnityEngine.InputLegacyModule", "UnityEngine", "UnityEngine.CoreModule" };
+                foreach (string name in assemblyNames)
+                {
+                    try
+                    {
+                        var asm = Assembly.Load(name);
+                        if (asm != null)
+                        {
+                            inputType = asm.GetType("UnityEngine.Input");
+                            if (inputType != null)
+                            {
+                                getKeyDownMethod = inputType.GetMethod("GetKeyDown", new Type[] { typeof(KeyCode) });
+                                if (getKeyDownMethod != null) break;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                if (getKeyDownMethod == null)
+                {
+                    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        try
+                        {
+                            inputType = asm.GetType("UnityEngine.Input");
+                            if (inputType != null)
+                            {
+                                getKeyDownMethod = inputType.GetMethod("GetKeyDown", new Type[] { typeof(KeyCode) });
+                                if (getKeyDownMethod != null) break;
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+        }
 
         void Awake()
         {
@@ -29,6 +74,13 @@ namespace UniversalHack
             gcFound = false;
         }
 
+        bool IsKeyDown(KeyCode key)
+        {
+            if (getKeyDownMethod == null) return false;
+            try { return (bool)getKeyDownMethod.Invoke(null, new object[] { key }); }
+            catch { return false; }
+        }
+
         void Update()
         {
             if (!HackMenu.ActiveFeatures.Contains("书黑客"))
@@ -37,37 +89,28 @@ namespace UniversalHack
             if (!gcFound || gcInstance == null)
             {
                 FindGameController();
+                if (gcInstance == null) return;
             }
 
-            if (gcInstance == null) return;
-
-            if (Input.GetKeyDown(KeyCode.Q) && !qPressed)
-            {
-                qPressed = true;
+            if (IsKeyDown(KeyCode.Q))
                 ModifyNotebooks(1);
-            }
-            if (Input.GetKeyUp(KeyCode.Q))
-            {
-                qPressed = false;
-            }
 
-            if (Input.GetKeyDown(KeyCode.E) && !ePressed)
-            {
-                ePressed = true;
+            if (IsKeyDown(KeyCode.E))
                 ModifyNotebooks(-1);
-            }
-            if (Input.GetKeyUp(KeyCode.E))
-            {
-                ePressed = false;
-            }
         }
 
         void ModifyNotebooks(int delta)
         {
+            if (gcType == null || gcInstance == null) return;
+
             var notebooksField = gcType.GetField("notebooks",
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            var updateMethod = gcType.GetMethod("UpdateNotebookCount",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            if (notebooksField == null)
+            {
+                notebooksField = gcType.GetField("notebookCount",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            }
 
             if (notebooksField == null) return;
 
@@ -75,29 +118,42 @@ namespace UniversalHack
             int newValue = Mathf.Max(0, current + delta);
             notebooksField.SetValue(gcInstance, newValue);
 
+            var updateMethod = gcType.GetMethod("UpdateNotebookCount",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            if (updateMethod == null)
+            {
+                updateMethod = gcType.GetMethod("UpdateNotebooks",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            }
+
             if (updateMethod != null)
             {
                 updateMethod.Invoke(gcInstance, null);
             }
-
         }
 
         private void FindGameController()
         {
-            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
                 try
                 {
                     foreach (var type in asm.GetTypes())
                     {
-                        if (!type.Name.Contains("GameController")) continue;
-                        var obj = FindObjectOfType(type);
-                        if (obj != null)
+                        if (type.Name == "GameControllerScript" ||
+                            type.Name == "GameController" ||
+                            type.Name == "GC" ||
+                            type.Name.Contains("GameController"))
                         {
-                            gcInstance = obj;
-                            gcType = type;
-                            gcFound = true;
-                            return;
+                            var obj = FindObjectOfType(type);
+                            if (obj != null)
+                            {
+                                gcInstance = obj;
+                                gcType = type;
+                                gcFound = true;
+                                return;
+                            }
                         }
                     }
                 }

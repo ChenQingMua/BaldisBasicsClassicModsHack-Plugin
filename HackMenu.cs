@@ -21,6 +21,15 @@ namespace UniversalHack
             new[] { "主菜单", "功能列表", "水印", "隐藏菜单仅移除遮挡" }
         };
 
+        private readonly string[][] MENUS_EN = new[]
+        {
+            new[] { "Events", "Ignore Principal" , "Ignore Crafters", "Disable Baldi Move", "Instant Rage", "Deaf Baldi", "No Baldi", "No Principal", "No Crafters", "No Playtime", "No Sweep", "No First Prize", "No Bully" , "Book Hacker", "Jump All Wrong", "Instant Win"},
+            new[] { "Movement", "No Clip", "Speed", "Anti Push" },
+            new[] { "Player", "God Mode", "Infinite Stamina", "Infinite Items"},
+            new[] { "Visual", "ESP", "Magnifier", "FOV", "Tracker", "Red Light", "Outline", "Texture Rotate", "Auto Rotate"},
+            new[] { "Main", "Feature List", "Watermark", "Hide Cover Only" }
+        };
+
         private Dictionary<string, bool> featureStates = new Dictionary<string, bool>();
         private Dictionary<string, Rect> menuRects = new Dictionary<string, Rect>();
         private Dictionary<string, bool> menuExpanded = new Dictionary<string, bool>();
@@ -30,24 +39,30 @@ namespace UniversalHack
         private float hue = 0f;
         private bool showMenu = true;
         private bool hideOverlayOnly = false;
-        private float originalTimeScale = 1f;
+        private bool englishMode = false;
         private GUIStyle titleStyle;
         private GUIStyle buttonStyle;
         private GUIStyle buttonActiveStyle;
         private GUIStyle listItemStyle;
+        private GUIStyle controlStyle;
+        private GUIStyle controlLabelStyle;
 
         private Texture2D whiteTex;
         private Texture2D bgTex;
         private Texture2D titleBgTex;
         private Texture2D blackTex;
         private Texture2D grayTex;
+        private Texture2D checkTex;
 
-        private const float MENU_WIDTH = 300f;
-        private const float TITLE_HEIGHT = 72f;
-        private const float BUTTON_HEIGHT = 64f;
+        private const float SCALE = 0.75f;
+        private const float MENU_WIDTH = 300f * SCALE;
+        private const float TITLE_HEIGHT = 72f * SCALE;
+        private const float BUTTON_HEIGHT = 64f * SCALE;
         private const float ALPHA_BG = 0.33f;
+        private const float CHECKBOX_SIZE = 24f * SCALE;
 
-        private bool tabPressedInGUI = false;
+        private float lastToggleTime = -1f;
+        private const float TOGGLE_COOLDOWN = 0.15f;
 
         void Awake()
         {
@@ -56,16 +71,17 @@ namespace UniversalHack
             titleBgTex = MakeTex(Color.white);
             blackTex = MakeTex(new Color(0f, 0f, 0f, 0.54f));
             grayTex = MakeTex(new Color(0f, 0f, 0f, 0.6f));
+            checkTex = MakeTex(new Color(0f, 0.8f, 0.2f, 1f));
 
-            float startX = 40f;
-            float startY = 40f;
+            float startX = 40f * SCALE;
+            float startY = 40f * SCALE;
             foreach (var menu in MENUS)
             {
                 string title = menu[0];
                 menuRects[title] = new Rect(startX, startY, MENU_WIDTH, TITLE_HEIGHT);
                 menuExpanded[title] = true;
                 isDragging[title] = false;
-                startX += MENU_WIDTH + 20f;
+                startX += MENU_WIDTH + 20f * SCALE;
             }
 
             lock (Lock)
@@ -80,39 +96,60 @@ namespace UniversalHack
 
         void Update()
         {
-
-            hue = (hue + 90f * Time.unscaledDeltaTime) % 360f;
+            if (Input.GetKeyDown(KeyCode.Tab))
+            {
+                TryToggle();
+            }
         }
 
         void OnGUI()
         {
-
             Event e = Event.current;
+
             if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Tab)
             {
-                tabPressedInGUI = true;
-                e.Use();
-            }
-
-            InitStyles();
-
-            if (showMenu)
-            {
-                if (!hideOverlayOnly)
+                if (TryToggle())
                 {
-                    GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), grayTex);
+                    e.Use();
                 }
-                DrawMenus();
             }
 
-            DrawWatermark();
-            DrawFeatureList();
-
-            if (tabPressedInGUI)
+            if (e.type == EventType.Repaint)
             {
-                tabPressedInGUI = false;
-                ToggleMenu();
+                hue = (Time.realtimeSinceStartup * 90f) % 360f;
+
+                InitStyles();
+
+                if (showMenu)
+                {
+                    if (!hideOverlayOnly)
+                    {
+                        GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), grayTex);
+                        DrawBottomRightControls();
+                    }
+                    DrawMenusRepaint();
+                }
+
+                DrawWatermark();
+                DrawFeatureList();
             }
+            else if (showMenu && (e.type == EventType.MouseDown || e.type == EventType.MouseUp || e.type == EventType.MouseDrag))
+            {
+                HandleMenuInput(e);
+                if (!hideOverlayOnly)
+                    HandleBottomRightInput(e);
+            }
+        }
+
+        bool TryToggle()
+        {
+            float now = Time.unscaledTime;
+            if (now - lastToggleTime < TOGGLE_COOLDOWN)
+                return false;
+
+            lastToggleTime = now;
+            ToggleMenu();
+            return true;
         }
 
         void ToggleMenu()
@@ -122,68 +159,32 @@ namespace UniversalHack
 
             if (showMenu)
             {
-
                 if (hideOverlayOnlyEnabled)
                 {
-
-                    hideOverlayOnly = true;
-                    Time.timeScale = originalTimeScale;
-                    FreezeGame(false);
+                    hideOverlayOnly = !hideOverlayOnly;
                 }
                 else
                 {
-
                     showMenu = false;
                     ShowMenu = false;
-                    Time.timeScale = originalTimeScale;
-                    FreezeGame(false);
                 }
             }
             else
             {
-
                 showMenu = true;
                 ShowMenu = true;
                 hideOverlayOnly = false;
-                originalTimeScale = Time.timeScale;
-                Time.timeScale = 0f;
+            }
+
+            if (showMenu)
+            {
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible = true;
-                FreezeGame(true);
             }
-        }
-
-        void FreezeGame(bool freeze)
-        {
-            object player = null;
-            System.Type playerType = null;
-            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+            else
             {
-                try
-                {
-                    foreach (var type in asm.GetTypes())
-                    {
-                        if (type.Name != "PlayerScript") continue;
-                        player = FindObjectOfType(type);
-                        if (player != null)
-                        {
-                            playerType = type;
-                            break;
-                        }
-                    }
-                }
-                catch { }
-                if (player != null) break;
-            }
-
-            if (player != null && playerType != null)
-            {
-                var ccField = playerType.GetField("cc", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (ccField != null)
-                {
-                    var cc = ccField.GetValue(player) as CharacterController;
-                    if (cc != null) cc.enabled = !freeze;
-                }
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
             }
         }
 
@@ -192,13 +193,13 @@ namespace UniversalHack
             if (titleStyle != null) return;
 
             titleStyle = new GUIStyle(GUI.skin.label);
-            titleStyle.fontSize = 34;
+            titleStyle.fontSize = (int)(34f * SCALE);
             titleStyle.fontStyle = (FontStyle)1;
             titleStyle.alignment = (TextAnchor)4;
             titleStyle.normal.textColor = new Color(0f, 0.204f, 1f, 1f);
 
             buttonStyle = new GUIStyle(GUI.skin.button);
-            buttonStyle.fontSize = 30;
+            buttonStyle.fontSize = (int)(30f * SCALE);
             buttonStyle.alignment = (TextAnchor)4;
             buttonStyle.normal.textColor = new Color(0f, 0.204f, 1f, 1f);
             buttonStyle.normal.background = null;
@@ -216,15 +217,36 @@ namespace UniversalHack
             buttonActiveStyle.active.textColor = Color.white;
 
             listItemStyle = new GUIStyle(GUI.skin.label);
-            listItemStyle.fontSize = 36;
+            listItemStyle.fontSize = (int)(36f * SCALE);
             listItemStyle.alignment = (TextAnchor)5;
+
+            controlStyle = new GUIStyle(GUI.skin.label);
+            controlStyle.fontSize = (int)(22f * SCALE);
+            controlStyle.alignment = (TextAnchor)4;
+            controlStyle.normal.textColor = new Color(0.3f, 0.6f, 1f, 1f);
+
+            controlLabelStyle = new GUIStyle(GUI.skin.label);
+            controlLabelStyle.fontSize = (int)(22f * SCALE);
+            controlLabelStyle.alignment = (TextAnchor)3;
+            controlLabelStyle.normal.textColor = Color.white;
         }
 
-        void DrawMenus()
+        string GetDisplayText(string cnText)
         {
-            Event e = Event.current;
-            Color rainbow = GetRainbowColor(hue);
+            if (!englishMode) return cnText;
+            for (int m = 0; m < MENUS.Length; m++)
+            {
+                for (int i = 0; i < MENUS[m].Length; i++)
+                {
+                    if (MENUS[m][i] == cnText)
+                        return MENUS_EN[m][i];
+                }
+            }
+            return cnText;
+        }
 
+        void HandleMenuInput(Event e)
+        {
             foreach (var menu in MENUS)
             {
                 string title = menu[0];
@@ -235,13 +257,7 @@ namespace UniversalHack
                 if (expanded)
                     totalHeight += (menu.Length - 1) * BUTTON_HEIGHT;
 
-                Rect fullRect = new Rect(rect.x, rect.y, MENU_WIDTH, totalHeight);
-
-                GUI.DrawTexture(fullRect, bgTex);
-
                 Rect titleRect = new Rect(rect.x, rect.y, MENU_WIDTH, TITLE_HEIGHT);
-                GUI.DrawTexture(titleRect, titleBgTex);
-                GUI.Label(titleRect, title, titleStyle);
 
                 if (e.type == EventType.MouseDown && e.button == 0)
                 {
@@ -283,19 +299,6 @@ namespace UniversalHack
                         bool isOn = featureStates.ContainsKey(feature) && featureStates[feature];
                         Rect btnRect = new Rect(rect.x, rect.y + TITLE_HEIGHT + (i - 1) * BUTTON_HEIGHT, MENU_WIDTH, BUTTON_HEIGHT);
 
-                        if (isOn)
-                        {
-                            GUI.color = rainbow;
-                            GUI.DrawTexture(btnRect, whiteTex);
-                            GUI.color = Color.white;
-                            GUI.Label(btnRect, feature, buttonActiveStyle);
-                        }
-                        else
-                        {
-                            GUI.color = Color.white;
-                            GUI.Label(btnRect, feature, buttonStyle);
-                        }
-
                         if (e.type == EventType.MouseDown && e.button == 0 && btnRect.Contains(e.mousePosition))
                         {
                             featureStates[feature] = !isOn;
@@ -316,8 +319,120 @@ namespace UniversalHack
                     }
                 }
             }
+        }
+
+        void DrawMenusRepaint()
+        {
+            Color rainbow = GetRainbowColor(hue);
+
+            foreach (var menu in MENUS)
+            {
+                string title = menu[0];
+                Rect rect = menuRects[title];
+                bool expanded = menuExpanded[title];
+
+                float totalHeight = TITLE_HEIGHT;
+                if (expanded)
+                    totalHeight += (menu.Length - 1) * BUTTON_HEIGHT;
+
+                Rect fullRect = new Rect(rect.x, rect.y, MENU_WIDTH, totalHeight);
+
+                GUI.DrawTexture(fullRect, bgTex);
+
+                Rect titleRect = new Rect(rect.x, rect.y, MENU_WIDTH, TITLE_HEIGHT);
+                GUI.DrawTexture(titleRect, titleBgTex);
+                GUI.Label(titleRect, GetDisplayText(title), titleStyle);
+
+                if (expanded)
+                {
+                    for (int i = 1; i < menu.Length; i++)
+                    {
+                        string feature = menu[i];
+                        bool isOn = featureStates.ContainsKey(feature) && featureStates[feature];
+                        Rect btnRect = new Rect(rect.x, rect.y + TITLE_HEIGHT + (i - 1) * BUTTON_HEIGHT, MENU_WIDTH, BUTTON_HEIGHT);
+
+                        if (isOn)
+                        {
+                            GUI.color = rainbow;
+                            GUI.DrawTexture(btnRect, whiteTex);
+                            GUI.color = Color.white;
+                            GUI.Label(btnRect, GetDisplayText(feature), buttonActiveStyle);
+                        }
+                        else
+                        {
+                            GUI.color = Color.white;
+                            GUI.Label(btnRect, GetDisplayText(feature), buttonStyle);
+                        }
+                    }
+                }
+            }
 
             GUI.color = Color.white;
+        }
+
+        void DrawBottomRightControls()
+        {
+            float pad = 20f * SCALE;
+            float ctrlW = 200f * SCALE;
+            float ctrlH = 40f * SCALE;
+            float gap = 10f * SCALE;
+
+            float x = Screen.width - pad - ctrlW;
+            float yGitHub = Screen.height - pad - ctrlH - gap - ctrlH;
+            float yCheck = Screen.height - pad - ctrlH;
+
+            Rect gitHubRect = new Rect(x, yGitHub, ctrlW, ctrlH);
+            GUI.DrawTexture(gitHubRect, bgTex);
+            GUI.Label(gitHubRect, "GitHub", controlStyle);
+
+            Rect checkRect = new Rect(x, yCheck, ctrlW, ctrlH);
+            GUI.DrawTexture(checkRect, bgTex);
+
+            float boxSize = CHECKBOX_SIZE;
+            float cx = x + 12f * SCALE;
+            float cy = yCheck + (ctrlH - boxSize) * 0.5f;
+            Rect boxRect = new Rect(cx, cy, boxSize, boxSize);
+
+            GUI.DrawTexture(boxRect, whiteTex);
+            if (englishMode)
+            {
+                float inner = 4f * SCALE;
+                GUI.DrawTexture(new Rect(boxRect.x + inner, boxRect.y + inner, boxSize - inner * 2f, boxSize - inner * 2f), checkTex);
+            }
+
+            float labelX = cx + boxSize + 10f * SCALE;
+            float labelW = ctrlW - boxSize - 30f * SCALE;
+            Rect labelRect = new Rect(labelX, yCheck, labelW, ctrlH);
+            GUI.Label(labelRect, "English Mode", controlLabelStyle);
+        }
+
+        void HandleBottomRightInput(Event e)
+        {
+            if (e.type != EventType.MouseDown || e.button != 0) return;
+
+            float pad = 20f * SCALE;
+            float ctrlW = 200f * SCALE;
+            float ctrlH = 40f * SCALE;
+            float gap = 10f * SCALE;
+
+            float x = Screen.width - pad - ctrlW;
+            float yGitHub = Screen.height - pad - ctrlH - gap - ctrlH;
+            float yCheck = Screen.height - pad - ctrlH;
+
+            Rect gitHubRect = new Rect(x, yGitHub, ctrlW, ctrlH);
+            if (gitHubRect.Contains(e.mousePosition))
+            {
+                Application.OpenURL("https://github.com/ChenQingMua/BaldisBasicsClassicModsHack-Plugin");
+                e.Use();
+                return;
+            }
+
+            Rect checkHitRect = new Rect(x, yCheck, ctrlW, ctrlH);
+            if (checkHitRect.Contains(e.mousePosition))
+            {
+                englishMode = !englishMode;
+                e.Use();
+            }
         }
 
         void DrawWatermark()
@@ -329,11 +444,14 @@ namespace UniversalHack
             }
             if (!show) return;
 
-            float x = 20f;
-            float y = Screen.height - 20f;
+            float x = 20f * SCALE;
+            float y = Screen.height - 20f * SCALE;
 
             string timeStr = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
-            string procStr = "Baldis Basics Classic Mods Hack By JisGreen";
+            string procStr = 
+                "Baldis Basics Classic Mods Hack" +
+                " v 1.3 " +
+                "By JisGreen";
             string logoStr = "Press Tab To Open Or Close Menu";
 
             Color c1 = GetRainbowColor(hue);
@@ -341,7 +459,7 @@ namespace UniversalHack
             Color c3 = GetRainbowColor((hue + 80f) % 360f);
 
             GUIStyle ws = new GUIStyle(GUI.skin.label);
-            ws.fontSize = 36;
+            ws.fontSize = (int)(36f * SCALE);
             ws.alignment = (TextAnchor)3;
             ws.normal.background = blackTex;
 
@@ -381,23 +499,24 @@ namespace UniversalHack
             }
             if (features.Count == 0) return;
 
-            features.Sort((a, b) => CalcTextWidth(b, 36).CompareTo(CalcTextWidth(a, 36)));
+            features.Sort((a, b) => CalcTextWidth(GetDisplayText(b), (int)(36f * SCALE)).CompareTo(CalcTextWidth(GetDisplayText(a), (int)(36f * SCALE))));
 
-            float x = Screen.width - 20f;
-            float y = 20f;
+            float x = Screen.width - 20f * SCALE;
+            float y = 20f * SCALE;
 
             for (int i = 0; i < features.Count; i++)
             {
                 string f = features[i];
+                string display = GetDisplayText(f);
                 Color col = GetItemColor(i, features.Count);
-                float w = CalcTextWidth(f, 36) + 40f;
+                float w = CalcTextWidth(display, (int)(36f * SCALE)) + 40f * SCALE;
 
                 GUIStyle st = new GUIStyle(listItemStyle);
                 st.normal.textColor = col;
                 st.normal.background = blackTex;
 
-                GUI.Label(new Rect(x - w, y, w, 52f), " " + f + " ", st);
-                y += 52f;
+                GUI.Label(new Rect(x - w, y, w, 52f * SCALE), " " + display + " ", st);
+                y += 52f * SCALE;
             }
         }
 
@@ -451,6 +570,7 @@ namespace UniversalHack
             if (titleBgTex != null) Destroy(titleBgTex);
             if (blackTex != null) Destroy(blackTex);
             if (grayTex != null) Destroy(grayTex);
+            if (checkTex != null) Destroy(checkTex);
         }
     }
 }

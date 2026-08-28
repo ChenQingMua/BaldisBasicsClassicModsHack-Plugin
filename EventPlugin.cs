@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using HarmonyLib;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -7,6 +8,7 @@ namespace UniversalHack
 {
     public class EventPlugin : MonoBehaviour
     {
+        private Harmony harmony;
         private Dictionary<string, bool> lastStates = new Dictionary<string, bool>();
         private object gcInstance;
         private System.Type gcType;
@@ -20,21 +22,48 @@ namespace UniversalHack
 
         void Awake()
         {
+            harmony = new Harmony("com.universal.eventplugin");
             SceneManager.sceneLoaded += OnSceneLoaded;
 
-            PatchManager.Register("baldi_move", "BaldiScript", "Move",
-                prefix: typeof(Patches).GetMethod("BaldiMove_Prefix", BindingFlags.Static | BindingFlags.Public));
+            var baldiMoveMethod = typeof(Patches).GetMethod("BaldiMove_Prefix", BindingFlags.Static | BindingFlags.Public);
+            var principalMethod = typeof(Patches).GetMethod("PrincipalTrigger_Prefix", BindingFlags.Static | BindingFlags.Public);
+            var craftersMethod = typeof(Patches).GetMethod("CraftersTrigger_Prefix", BindingFlags.Static | BindingFlags.Public);
 
-            PatchManager.Register("principal_trigger", "PrincipalScript", "OnTriggerStay",
-                prefix: typeof(Patches).GetMethod("PrincipalTrigger_Prefix", BindingFlags.Static | BindingFlags.Public));
+            PatchMethod("BaldiScript", "Move", baldiMoveMethod);
+            PatchMethod("PrincipalScript", "OnTriggerStay", principalMethod);
+            PatchMethod("CraftersScript", "OnTriggerEnter", craftersMethod);
+        }
 
-            PatchManager.Register("crafters_trigger", "CraftersScript", "OnTriggerEnter",
-                prefix: typeof(Patches).GetMethod("CraftersTrigger_Prefix", BindingFlags.Static | BindingFlags.Public));
+        void PatchMethod(string typeName, string methodName, MethodInfo prefix)
+        {
+            try
+            {
+                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    foreach (var type in asm.GetTypes())
+                    {
+                        if (type.Name == typeName)
+                        {
+                            var method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                            if (method != null)
+                            {
+                                harmony.Patch(method, prefix != null ? new HarmonyMethod(prefix) : null);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
         }
 
         void OnDestroy()
         {
             SceneManager.sceneLoaded -= OnSceneLoaded;
+            if (harmony != null)
+            {
+                try { harmony.UnpatchAll("com.universal.eventplugin"); } catch { }
+            }
         }
 
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -157,7 +186,6 @@ namespace UniversalHack
             {
                 getAngryMethod.Invoke(gcInstance, new object[] { 1f });
                 angerTriggered = true;
-
             }
         }
 
@@ -209,7 +237,10 @@ namespace UniversalHack
                 if (field != null)
                 {
                     var obj = field.GetValue(gcInstance) as GameObject;
-                    if (obj != null) obj.SetActive(!current);
+                    if (obj != null)
+                    {
+                        obj.SetActive(!current);
+                    }
                 }
             }
         }

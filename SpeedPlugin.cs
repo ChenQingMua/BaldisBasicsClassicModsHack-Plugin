@@ -66,8 +66,8 @@ namespace UniversalHack
                     if (originalRunSpeed == 0f)
                         originalRunSpeed = (float)runSpeedField.GetValue(playerInstance);
 
-                    walkSpeedField.SetValue(playerInstance, originalWalkSpeed * 2f);
-                    runSpeedField.SetValue(playerInstance, originalRunSpeed * 2f);
+                    walkSpeedField.SetValue(playerInstance, originalWalkSpeed * 3f);
+                    runSpeedField.SetValue(playerInstance, originalRunSpeed * 3f);
                     speedApplied = true;
                 }
             }

@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using HarmonyLib;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -6,24 +7,55 @@ namespace UniversalHack
 {
     public class VisualPlugin : MonoBehaviour
     {
+        private Harmony harmony;
         private bool redModeApplied = false;
         private static System.Random random = new System.Random();
         private float spinAngle = 0f;
 
         void Awake()
         {
+            harmony = new Harmony("com.universal.visual");
             SceneManager.sceneLoaded += OnSceneLoaded;
 
-            PatchManager.Register("billboard_spin", "Billboard", "LateUpdate",
-                prefix: typeof(Patches).GetMethod("BillboardLateUpdate_Prefix", BindingFlags.Static | BindingFlags.Public));
+            var billboardMethod = typeof(Patches).GetMethod("BillboardLateUpdate_Prefix", BindingFlags.Static | BindingFlags.Public);
+            var cameraMethod = typeof(Patches).GetMethod("CameraLateUpdate_Postfix", BindingFlags.Static | BindingFlags.Public);
 
-            PatchManager.Register("camera_spin", "CameraScript", "LateUpdate",
-                postfix: typeof(Patches).GetMethod("CameraLateUpdate_Postfix", BindingFlags.Static | BindingFlags.Public));
+            PatchMethod("Billboard", "LateUpdate", billboardMethod);
+            PatchMethod("CameraScript", "LateUpdate", null, cameraMethod);
+        }
+
+        void PatchMethod(string typeName, string methodName, MethodInfo prefix = null, MethodInfo postfix = null)
+        {
+            try
+            {
+                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    foreach (var type in asm.GetTypes())
+                    {
+                        if (type.Name == typeName)
+                        {
+                            var method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                            if (method != null)
+                            {
+                                harmony.Patch(method,
+                                    prefix != null ? new HarmonyMethod(prefix) : null,
+                                    postfix != null ? new HarmonyMethod(postfix) : null);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
         }
 
         void OnDestroy()
         {
             SceneManager.sceneLoaded -= OnSceneLoaded;
+            if (harmony != null)
+            {
+                try { harmony.UnpatchAll("com.universal.visual"); } catch { }
+            }
         }
 
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -34,7 +66,6 @@ namespace UniversalHack
 
         void Update()
         {
-
             bool enableRed = HackMenu.ActiveFeatures.Contains("红温模式");
 
             if (enableRed && !redModeApplied)
