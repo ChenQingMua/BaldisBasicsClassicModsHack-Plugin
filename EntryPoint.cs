@@ -3,13 +3,14 @@ using UnityEngine;
 
 namespace UniversalHack
 {
-    [BepInPlugin("com.universal.plugin", "Baldis Basics Classic Mods Hack", "1.3.0")]
+    [BepInPlugin("com.universal.plugin", "Baldis Basics Classic Mods Hack", "1.4.0")]
     public class EntryPoint : BaseUnityPlugin
     {
         void Awake()
         {
             Application.targetFrameRate = -1;
             QualitySettings.vSyncCount = 0;
+
             gameObject.AddComponent<HackMenu>();
             gameObject.AddComponent<NoClipPlugin>();
             gameObject.AddComponent<ESPPlugin>();
@@ -24,7 +25,7 @@ namespace UniversalHack
             gameObject.AddComponent<SpeedPlugin>();
             gameObject.AddComponent<MouseFixPlugin>();
             gameObject.AddComponent<EventPlugin>();
-            
+            gameObject.AddComponent<FlyPlugin>();
 
             Logger.LogInfo("Hack Plugin Loaded!");
         }
