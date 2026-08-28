@@ -1,4 +1,4 @@
-# Baldi's Basics Classic Mods Hack 1.3
+# Baldi's Basics Classic Mods Hack 1.4
 
 基于 __BepInEx 5.4.23__ ，针对 __Baldi's Basics Classic__ ，__Baldi's Basics Classic Remastered__ 以及社区衍生的 __模组版本__ 打造的通用作弊菜单。
 
@@ -49,6 +49,7 @@ __Version 1.2__ adds support for __English Mode__, which can be toggled via the 
 | 穿墙 | 关闭碰撞检测。 |
 | 移速 | 二倍移动速度。 |
 | 无视推动 | 免疫 Gotta Sweep 和 1st Prize 的推动。 |
+| 飞行 | 左键向上，右键向下，建议搭配 穿墙 使用。 |
 
 ### 玩家类
 | 功能 | 说明 |
@@ -74,7 +75,6 @@ __Version 1.2__ adds support for __English Mode__, which can be toggled via the 
 |------|------|
 | 功能列表 | 屏幕右上角显示已开启的功能，同时拥有美观的RGB渐变。 |
 | 水印 | 左下角显示文字，同时拥有美观的RGB渐变。 |
-| 隐藏菜单仅移除遮挡 | Tab 隐藏菜单时保留5个面板，仅移除灰色背景和冻结效果。 |
 
 ---
 
