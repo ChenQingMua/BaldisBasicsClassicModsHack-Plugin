@@ -791,7 +791,7 @@ namespace UniversalHack
             float y = Screen.height - 20f * scale;
 
             string timeStr = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
-            string procStr = "Baldis Basics Classic Mods Hack 1.4 By JisGreen";
+            string procStr = "Baldis Basics Classic Mods Hack 1.5 By JisGreen";
             string logoStr = "Press Tab To Open Or Close Menu";
 
             Color c1 = gradientEffect ? GetRainbowColor(hue) : Color.white;

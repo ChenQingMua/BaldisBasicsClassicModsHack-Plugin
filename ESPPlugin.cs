@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace UniversalHack
@@ -7,7 +8,26 @@ namespace UniversalHack
     {
         private Texture2D whiteTex;
         private Texture2D translucentWhiteTex;
-        private string[] eventNames = new string[] { "baldi", "principal", "crafters", "playtime", "sweep", "prize", "bully", "boss", "null" };
+
+        private string[] eventNames = new string[]
+        {
+            "baldi", "principal", "crafters", "playtime", "sweep", "prize",
+            "bully", "boss", "null", "gotta", "first", "1st",
+            "baldoon"
+        };
+
+        private string[] eventScriptNames = new string[]
+        {
+            "BaldiScript", "PrincipalScript", "CraftersScript", "PlaytimeScript",
+            "GottaSweepScript", "FirstPrizeScript", "BullyScript", "BossScript",
+            "NullScript", "Baldi", "Principal", "Crafters", "Playtime",
+            "GottaSweep", "FirstPrize", "Bully", "Boss", "Null"
+        };
+
+        private Dictionary<int, Vector3> lastPositions = new Dictionary<int, Vector3>();
+        private Dictionary<int, float> lastMoveTimes = new Dictionary<int, float>();
+        private const float MOVE_THRESHOLD = 0.001f;
+        private const float MOVE_MEMORY = 0.35f;
 
         void Awake()
         {
@@ -18,6 +38,89 @@ namespace UniversalHack
             translucentWhiteTex = new Texture2D(1, 1);
             translucentWhiteTex.SetPixel(0, 0, new Color(1f, 1f, 1f, 0.67f));
             translucentWhiteTex.Apply();
+        }
+
+        bool NameChainMatches(Transform t)
+        {
+            Transform current = t;
+            int depth = 0;
+            while (current != null && depth < 12)
+            {
+                string n = current.gameObject.name;
+                if (!string.IsNullOrEmpty(n))
+                {
+                    string lower = n.ToLower();
+                    foreach (string ev in eventNames)
+                    {
+                        if (lower.Contains(ev))
+                            return true;
+                    }
+                }
+                current = current.parent;
+                depth++;
+            }
+            return false;
+        }
+
+        bool ScriptMatches(GameObject go)
+        {
+            if (go == null) return false;
+
+            var behaviours = go.GetComponentsInChildren<MonoBehaviour>(true);
+            foreach (var mb in behaviours)
+            {
+                if (mb == null) continue;
+                string typeName = mb.GetType().Name;
+                foreach (string s in eventScriptNames)
+                {
+                    if (typeName == s || typeName.Contains(s))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        bool IsMoving(GameObject go)
+        {
+            if (go == null) return false;
+
+            int id = go.GetInstanceID();
+            Vector3 pos = go.transform.position;
+            float now = Time.unscaledTime;
+
+            if (lastPositions.TryGetValue(id, out Vector3 prev))
+            {
+                if ((pos - prev).sqrMagnitude > MOVE_THRESHOLD * MOVE_THRESHOLD)
+                {
+                    lastMoveTimes[id] = now;
+                    lastPositions[id] = pos;
+                    return true;
+                }
+            }
+            lastPositions[id] = pos;
+
+            if (lastMoveTimes.TryGetValue(id, out float t))
+            {
+                if (now - t < MOVE_MEMORY)
+                    return true;
+            }
+
+            return false;
+        }
+
+        bool IsEventObject(GameObject go)
+        {
+            if (go == null) return false;
+            if (ScriptMatches(go)) return true;
+            if (NameChainMatches(go.transform)) return true;
+            if (IsMoving(go)) return true;
+            return false;
+        }
+
+        string GetLabel(GameObject go)
+        {
+            if (go == null) return "";
+            return go.name;
         }
 
         void OnGUI()
@@ -45,36 +148,17 @@ namespace UniversalHack
                 {
                     if (sr == null || !sr.gameObject.activeInHierarchy) continue;
 
-                    string lowerName = sr.name.ToLower();
-                    bool isEventObject = false;
-                    foreach (string eventName in eventNames)
-                    {
-                        if (lowerName.Contains(eventName))
-                        {
-                            isEventObject = true;
-                            break;
-                        }
-                    }
-
-                    if (isEventObject)
-                    {
+                    if (IsEventObject(sr.gameObject))
                         eventObjects.Add(sr);
-                    }
                     else
-                    {
                         normalObjects.Add(sr);
-                    }
                 }
 
                 foreach (SpriteRenderer sr in normalObjects)
-                {
                     DrawSpriteRenderer(sr, cam, drawBox, drawTracer, screenTopCenter, false);
-                }
 
                 foreach (SpriteRenderer sr in eventObjects)
-                {
                     DrawSpriteRenderer(sr, cam, drawBox, drawTracer, screenTopCenter, true);
-                }
             }
 
             if (drawMeshOutline)
@@ -86,39 +170,19 @@ namespace UniversalHack
                 {
                     if (mr == null || !mr.gameObject.activeInHierarchy) continue;
 
-                    string lowerName = mr.name.ToLower();
-                    if (lowerName.Contains("floor") || lowerName.Contains("ceiling")
-                        || lowerName.Contains("ground") || lowerName.Contains("wall")) continue;
+                    string name = mr.gameObject.name.ToLower();
 
-                    bool isEventObject = false;
-                    foreach (string eventName in eventNames)
-                    {
-                        if (lowerName.Contains(eventName))
-                        {
-                            isEventObject = true;
-                            break;
-                        }
-                    }
-
-                    if (isEventObject)
-                    {
+                    if (IsEventObject(mr.gameObject))
                         eventObjects.Add(mr);
-                    }
                     else
-                    {
                         normalObjects.Add(mr);
-                    }
                 }
 
                 foreach (MeshRenderer mr in normalObjects)
-                {
                     DrawMeshRenderer(mr, cam, false);
-                }
 
                 foreach (MeshRenderer mr in eventObjects)
-                {
                     DrawMeshRenderer(mr, cam, true);
-                }
             }
         }
 
@@ -160,6 +224,7 @@ namespace UniversalHack
             if (w < 5f || h < 5f) return;
 
             Vector2 boxTopCenter = new Vector2(minX + w / 2f, minY);
+            string label = GetLabel(sr.gameObject);
 
             if (drawBox)
             {
@@ -186,33 +251,24 @@ namespace UniversalHack
                 GUIStyle labelStyle = new GUIStyle(GUI.skin.label);
                 labelStyle.fontSize = 16;
                 if (isEventObject)
-                {
                     labelStyle.normal.textColor = Color.red;
-                }
                 else
-                {
                     labelStyle.normal.textColor = new Color(1f, 1f, 1f, 0.67f);
-                }
-                GUI.Label(new Rect(minX, minY - 24f, 300f, 24f), sr.name, labelStyle);
+
+                GUI.Label(new Rect(minX, minY - 24f, 300f, 24f), label, labelStyle);
             }
 
             if (drawTracer)
             {
                 if (isEventObject)
-                {
                     DrawLine(boxTopCenter, screenTopCenter, Color.red, 3f, whiteTex);
-                }
                 else
-                {
                     DrawLine(boxTopCenter, screenTopCenter, new Color(1f, 1f, 1f, 0.67f), 2f, translucentWhiteTex);
-                }
             }
         }
 
         void DrawMeshRenderer(MeshRenderer mr, Camera cam, bool isEventObject)
         {
-            string lowerName = mr.name.ToLower();
-
             Bounds b = mr.bounds;
             Vector3 c = b.center;
             Vector3 e = b.extents;

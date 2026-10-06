@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+﻿using System;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -21,6 +21,52 @@ namespace UniversalHack
         private float flyUpSpeed = 32f;
         private float flyDownSpeed = 32f;
 
+        private static MethodInfo getKeyMethod;
+        private static MethodInfo getAxisMethod;
+
+        static FlyPlugin()
+        {
+            try
+            {
+                string[] assemblyNames = { "UnityEngine.InputLegacyModule", "UnityEngine", "UnityEngine.CoreModule" };
+                Type inputType = null;
+
+                foreach (string name in assemblyNames)
+                {
+                    try
+                    {
+                        var asm = Assembly.Load(name);
+                        if (asm != null)
+                        {
+                            inputType = asm.GetType("UnityEngine.Input");
+                            if (inputType != null) break;
+                        }
+                    }
+                    catch { }
+                }
+
+                if (inputType == null)
+                {
+                    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        try
+                        {
+                            inputType = asm.GetType("UnityEngine.Input");
+                            if (inputType != null) break;
+                        }
+                        catch { }
+                    }
+                }
+
+                if (inputType != null)
+                {
+                    getKeyMethod = inputType.GetMethod("GetKey", new Type[] { typeof(KeyCode) });
+                    getAxisMethod = inputType.GetMethod("GetAxis", new Type[] { typeof(string) });
+                }
+            }
+            catch { }
+        }
+
         void Awake()
         {
             SceneManager.sceneLoaded += OnSceneLoaded;
@@ -41,6 +87,20 @@ namespace UniversalHack
             hasOriginalHeight = false;
         }
 
+        bool IsKey(KeyCode key)
+        {
+            if (getKeyMethod == null) return false;
+            try { return (bool)getKeyMethod.Invoke(null, new object[] { key }); }
+            catch { return false; }
+        }
+
+        float GetAxis(string axis)
+        {
+            if (getAxisMethod == null) return 0f;
+            try { return (float)getAxisMethod.Invoke(null, new object[] { axis }); }
+            catch { return 0f; }
+        }
+
         void Update()
         {
             bool flyActive = HackMenu.ActiveFeatures.Contains("飞行");
@@ -51,7 +111,7 @@ namespace UniversalHack
 
                 if (!flyActive && hasOriginalHeight)
                 {
-                    if (playerTransform != null && heightField != null)
+                    if (playerTransform != null && heightField != null && playerInstance != null)
                     {
                         Vector3 pos = playerTransform.position;
                         pos.y = originalHeight;
@@ -87,31 +147,25 @@ namespace UniversalHack
 
                 if (playerTransform == null) return;
 
-                float horizontal = Input.GetAxis("Horizontal");
-                float vertical = Input.GetAxis("Vertical");
+                float horizontal = GetAxis("Horizontal");
+                float vertical = GetAxis("Vertical");
 
-                Vector3 moveDirection = Vector3.zero;
-
-                if (playerTransform != null)
-                {
-                    moveDirection = playerTransform.forward * vertical + playerTransform.right * horizontal;
-                }
-                else
-                {
-                    moveDirection = new Vector3(horizontal, 0f, vertical);
-                }
+                Vector3 moveDirection = playerTransform.forward * vertical + playerTransform.right * horizontal;
 
                 if (moveDirection.magnitude > 1f)
                     moveDirection.Normalize();
 
                 moveDirection *= flySpeed * Time.deltaTime;
 
-                if (Input.GetMouseButton(0))
+                bool upInput = IsKey(KeyCode.R);
+                bool downInput = IsKey(KeyCode.F);
+
+                if (upInput)
                 {
                     currentHeight += flyUpSpeed * Time.deltaTime;
                 }
 
-                if (Input.GetMouseButton(1))
+                if (downInput)
                 {
                     currentHeight -= flyDownSpeed * Time.deltaTime;
                 }

@@ -1,4 +1,6 @@
 ﻿using HarmonyLib;
+using System;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -11,6 +13,14 @@ namespace UniversalHack
         private bool redModeApplied = false;
         private static System.Random random = new System.Random();
         private float spinAngle = 0f;
+
+        private bool hideHudActive = false;
+        private Dictionary<GameObject, bool> hudStates = new Dictionary<GameObject, bool>();
+
+        private static readonly string[] hudComponentNames = new string[]
+        {
+            "Canvas", "CanvasGroup", "Image", "RawImage", "Text", "TextMeshProUGUI", "TextMeshPro"
+        };
 
         void Awake()
         {
@@ -28,7 +38,7 @@ namespace UniversalHack
         {
             try
             {
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
                 {
                     foreach (var type in asm.GetTypes())
                     {
@@ -62,6 +72,8 @@ namespace UniversalHack
         {
             redModeApplied = false;
             spinAngle = 0f;
+            hideHudActive = false;
+            hudStates.Clear();
         }
 
         void Update()
@@ -88,6 +100,66 @@ namespace UniversalHack
             {
                 spinAngle = 0f;
             }
+
+            bool wantHideHud = HackMenu.ActiveFeatures.Contains("隐藏界面");
+
+            if (wantHideHud && !hideHudActive)
+            {
+                HideHUD(true);
+                hideHudActive = true;
+            }
+            else if (!wantHideHud && hideHudActive)
+            {
+                HideHUD(false);
+                hideHudActive = false;
+            }
+        }
+
+        void HideHUD(bool hide)
+        {
+            if (hide)
+            {
+                hudStates.Clear();
+
+                foreach (var go in FindObjectsOfType<GameObject>())
+                {
+                    if (go == null || !go.activeInHierarchy) continue;
+                    if (go.transform.parent != null) continue;
+
+                    if (HasHudComponent(go))
+                    {
+                        if (!hudStates.ContainsKey(go))
+                            hudStates[go] = go.activeSelf;
+                        go.SetActive(false);
+                    }
+                }
+            }
+            else
+            {
+                foreach (var kv in hudStates)
+                {
+                    if (kv.Key != null)
+                        kv.Key.SetActive(kv.Value);
+                }
+                hudStates.Clear();
+            }
+        }
+
+        bool HasHudComponent(GameObject go)
+        {
+            if (go == null) return false;
+
+            var components = go.GetComponents<Component>();
+            foreach (var c in components)
+            {
+                if (c == null) continue;
+                string typeName = c.GetType().Name;
+                foreach (string hud in hudComponentNames)
+                {
+                    if (typeName == hud) return true;
+                }
+            }
+            return false;
         }
 
         public static class Patches
@@ -111,7 +183,7 @@ namespace UniversalHack
                 if (!HackMenu.ActiveFeatures.Contains("自转"))
                     return;
 
-                VisualPlugin plugin = Object.FindObjectOfType<VisualPlugin>();
+                VisualPlugin plugin = UnityEngine.Object.FindObjectOfType<VisualPlugin>();
                 if (plugin == null) return;
 
                 Transform camTransform = __instance.transform;

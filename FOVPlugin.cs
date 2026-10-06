@@ -6,11 +6,11 @@ namespace UniversalHack
 {
     public class FOVPlugin : MonoBehaviour
     {
+        private Camera targetCamera;
         private float defaultFOV = 60f;
-        private object gcInstance;
-        private System.Type gcType;
-        private bool gcFound = false;
         private bool fovRecorded = false;
+        private bool lastZoomIn = false;
+        private bool lastZoomOut = false;
 
         void Awake()
         {
@@ -24,39 +24,49 @@ namespace UniversalHack
 
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            gcInstance = null;
-            gcType = null;
-            gcFound = false;
+            targetCamera = null;
             fovRecorded = false;
             defaultFOV = 60f;
+            lastZoomIn = false;
+            lastZoomOut = false;
         }
 
         void Update()
         {
-            if (!gcFound || gcInstance == null)
+            if (targetCamera == null)
             {
-                FindGameController();
+                targetCamera = FindPlayerCamera();
+                if (targetCamera == null) return;
+                fovRecorded = false;
             }
-
-            if (gcInstance == null) return;
-
-            var camField = gcType.GetField("playerCamera",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (camField == null) return;
-
-            var cam = camField.GetValue(gcInstance) as Camera;
-            if (cam == null) return;
 
             if (!fovRecorded)
             {
-                defaultFOV = cam.fieldOfView;
+                defaultFOV = targetCamera.fieldOfView;
                 fovRecorded = true;
-
-                ApplyFOV(cam);
+                ApplyFOV(targetCamera);
                 return;
             }
 
-            ApplyFOV(cam);
+            ApplyFOV(targetCamera);
+        }
+
+        Camera FindPlayerCamera()
+        {
+            Camera main = Camera.main;
+            if (main != null)
+            {
+                if (main.CompareTag("MainCamera"))
+                    return main;
+            }
+
+            foreach (var cam in FindObjectsOfType<Camera>())
+            {
+                if (cam == null || !cam.enabled || !cam.gameObject.activeInHierarchy) continue;
+                if (cam.CompareTag("MainCamera")) return cam;
+            }
+
+            return null;
         }
 
         void ApplyFOV(Camera cam)
@@ -64,43 +74,18 @@ namespace UniversalHack
             bool zoomIn = HackMenu.ActiveFeatures.Contains("放大镜");
             bool zoomOut = HackMenu.ActiveFeatures.Contains("增大视野");
 
+            if (zoomIn == lastZoomIn && zoomOut == lastZoomOut)
+                return;
+
+            lastZoomIn = zoomIn;
+            lastZoomOut = zoomOut;
+
             if ((zoomIn && zoomOut) || (!zoomIn && !zoomOut))
-            {
                 cam.fieldOfView = defaultFOV;
-            }
             else if (zoomIn)
-            {
-
                 cam.fieldOfView = defaultFOV - 30f;
-            }
             else if (zoomOut)
-            {
-
                 cam.fieldOfView = defaultFOV + 50f;
-            }
-        }
-
-        private void FindGameController()
-        {
-            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
-            {
-                try
-                {
-                    foreach (var type in asm.GetTypes())
-                    {
-                        if (!type.Name.Contains("GameController")) continue;
-                        var obj = FindObjectOfType(type);
-                        if (obj != null)
-                        {
-                            gcInstance = obj;
-                            gcType = type;
-                            gcFound = true;
-                            return;
-                        }
-                    }
-                }
-                catch { }
-            }
         }
     }
 }
