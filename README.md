@@ -1,4 +1,4 @@
-# Baldi's Basics Classic Mods Hack 1.4
+# Baldi's Basics Classic Mods Hack 1.5
 
 基于 __BepInEx 5.4.23__ ，针对 __Baldi's Basics Classic__ ，__Baldi's Basics Classic Remastered__ 以及社区衍生的 __模组版本__ 打造的通用作弊菜单。
 
@@ -49,7 +49,7 @@ __Version 1.2__ adds support for __English Mode__, which can be toggled via the 
 | 穿墙 | 关闭碰撞检测。 |
 | 移速 | 二倍移动速度。 |
 | 无视推动 | 免疫 Gotta Sweep 和 1st Prize 的推动。 |
-| 飞行 | 左键向上，右键向下，建议搭配 穿墙 使用。 |
+| 飞行 | R键向上，F键向下，建议搭配 穿墙 使用。 |
 
 ### 玩家类
 | 功能 | 说明 |
@@ -80,7 +80,7 @@ __Version 1.2__ adds support for __English Mode__, which can be toggled via the 
 
 ## 安装方法
 
-1. 下载 [`BepInEx 5.4.23`](https://github.com/BepInEx/BepInEx/releases)。
+1. 下载 [`BepInEx 5.4.2`](https://github.com/BepInEx/BepInEx/releases)。
 2. 将 `BepInEx` 解压到游戏根目录。
 3. 下载 `BaldisBasicsClassicModsHack.dll`。
 4. 将 `BaldisBasicsClassicModsHack.dll` 放入 `BepInEx/plugins/` 文件夹。
